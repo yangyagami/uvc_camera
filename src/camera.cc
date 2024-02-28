@@ -32,9 +32,9 @@ Camera::~Camera() {
 
   Close();
 
-  if (camera_connect_status_check_thread_ != nullptr) {
-    camera_connect_status_check_thread_->join();
-  }
+  //if (camera_connect_status_check_thread_ != nullptr) {
+  //  camera_connect_status_check_thread_->join();
+  //}
 
   FreeResources();
 }
@@ -90,11 +90,11 @@ bool Camera::Init(int width, int height, int fps) {
   ERROR_HANDLE("get_mode");
 
   connected_ = true;
-  camera_connect_status_check_thread_running_ = true;
-  if (camera_connect_status_check_thread_ == nullptr) {
-    camera_connect_status_check_thread_ = std::make_shared<std::thread>(
-        &Camera::CameraConnectStatusCheck, this);
-  }
+  //camera_connect_status_check_thread_running_ = true;
+  //if (camera_connect_status_check_thread_ == nullptr) {
+  //  camera_connect_status_check_thread_ = std::make_shared<std::thread>(
+  //      &Camera::CameraConnectStatusCheck, this);
+  //}
   return true;
 }
 

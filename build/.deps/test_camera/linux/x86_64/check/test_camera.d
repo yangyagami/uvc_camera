@@ -1,4 +1,7 @@
 {
+    files = {
+        "build/.objs/test_camera/linux/x86_64/check/test/src/test_camera.cc.o"
+    },
     values = {
         "/usr/bin/g++",
         {
@@ -12,8 +15,5 @@
             "-lopencv_highgui",
             "-fsanitize=address"
         }
-    },
-    files = {
-        "build/.objs/test_camera/linux/x86_64/check/test/src/test_camera.cc.o"
     }
 }
