@@ -3,7 +3,6 @@
 #ifndef CAMERA_CAMERA_H_
 #define CAMERA_CAMERA_H_
 
-#include <string>
 #include <queue>
 #include <mutex>
 #include <thread>
@@ -17,7 +16,7 @@ namespace uvc {
 
 class Camera {
  public:
-  Camera(const std::string &vid, const std::string &pid)
+  Camera(int vid, int pid)
       : ctx_(nullptr),
         dev_(nullptr),
         devh_(nullptr),
@@ -35,7 +34,7 @@ class Camera {
   bool Open();
   void Close();
   bool Read(cv::Mat &frame);
-  bool ReInitWhenDisconnected(int width, int height, int fps);
+  bool ReOpenWhenDisconnected(int width, int height, int fps);
   bool IsConnected();
 
   bool opened() {
@@ -65,8 +64,8 @@ class Camera {
   uvc_stream_ctrl_t ctrl_;
   uvc_error_t res_;  // 错误处理
 
-  std::string vid_;
-  std::string pid_;
+  int vid_;
+  int pid_;
 
   bool opened_;
   bool connected_;

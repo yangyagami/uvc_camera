@@ -22,19 +22,20 @@
 namespace uvc {
 
 Camera::~Camera() {
-  sleep(kThreadWaitSeconds);
-
   {
     std::lock_guard<std::mutex> lock(
         camera_connect_status_check_thread_running_lock_);
     camera_connect_status_check_thread_running_ = false;
+    if (opened_ == false) {
+      camera_connect_status_check_cv_.notify_all();
+    }
   }
 
   Close();
 
-  //if (camera_connect_status_check_thread_ != nullptr) {
-  //  camera_connect_status_check_thread_->join();
-  //}
+  if (camera_connect_status_check_thread_ != nullptr) {
+    camera_connect_status_check_thread_->join();
+  }
 
   FreeResources();
 }
@@ -45,13 +46,7 @@ bool Camera::Init(int width, int height, int fps) {
 
   std::cout << "UVC initialized" << std::endl;
 
-  int vid_num = 0;
-  int pid_num = 0;
-  if (vid_ != "" && pid_ != "") {
-    vid_num = std::stoi(vid_, 0, 16);
-    pid_num = std::stoi(pid_, 0, 16);
-  }
-  res_ = uvc_find_device(ctx_, &dev_, vid_num, pid_num, nullptr);
+  res_ = uvc_find_device(ctx_, &dev_, vid_, pid_, nullptr);
   ERROR_HANDLE("uvc_find_device");
 
   std::cout << "Device found" << std::endl;
@@ -90,11 +85,11 @@ bool Camera::Init(int width, int height, int fps) {
   ERROR_HANDLE("get_mode");
 
   connected_ = true;
-  //camera_connect_status_check_thread_running_ = true;
-  //if (camera_connect_status_check_thread_ == nullptr) {
-  //  camera_connect_status_check_thread_ = std::make_shared<std::thread>(
-  //      &Camera::CameraConnectStatusCheck, this);
-  //}
+  camera_connect_status_check_thread_running_ = true;
+  if (camera_connect_status_check_thread_ == nullptr) {
+    camera_connect_status_check_thread_ = std::make_shared<std::thread>(
+        &Camera::CameraConnectStatusCheck, this);
+  }
   return true;
 }
 
@@ -137,10 +132,12 @@ bool Camera::Read(cv::Mat &frame) {
   return true;
 }
 
-bool Camera::ReInitWhenDisconnected(int width, int height, int fps) {
+bool Camera::ReOpenWhenDisconnected(int width, int height, int fps) {
   Close();
 
-  return Init(width, height, fps);
+  FreeResources();
+
+  return Init(width, height, fps) && Open();
 }
 
 bool Camera::IsConnected() {
@@ -202,6 +199,10 @@ void Camera::CameraConnectStatusCheck() {
 
     std::unique_lock<std::mutex> opened_lock(opened_lock_);
     while (opened_ == false) {
+      if (camera_connect_status_check_thread_running_ == false) {
+        opened_lock.unlock();
+        return;
+      }
       camera_connect_status_check_cv_.wait(opened_lock);
     }
     opened_lock.unlock();
