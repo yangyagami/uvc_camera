@@ -9,7 +9,6 @@
             "-m64",
             "-fPIC",
             "-L3rdparty/libuvc/libs/amd64",
-            "-luvc",
             "-lopencv_core",
             "-lopencv_highgui",
             "-fsanitize=address"
