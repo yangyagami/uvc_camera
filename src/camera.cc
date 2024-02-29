@@ -137,7 +137,11 @@ bool Camera::ReOpenWhenDisconnected(int width, int height, int fps) {
 
   FreeResources();
 
-  return Init(width, height, fps) && Open();
+  if (Init(width, height, fps) == false) {
+    Close();
+    return false;
+  };
+  return Open();
 }
 
 bool Camera::IsConnected() {
