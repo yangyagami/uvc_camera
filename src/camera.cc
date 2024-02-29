@@ -226,8 +226,6 @@ void Camera::CameraConnectStatusCheck() {
       }
     }
 
-    std::cout << this << " " << " no frame times: " << no_frame_times
-              << std::endl;
     sleep(1);
   }
 }
