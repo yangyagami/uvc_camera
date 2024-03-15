@@ -12,7 +12,7 @@
 #include "libuvc/libuvc.h"
 #include "opencv2/opencv.hpp"
 
-#define ERROR_HANDLE(x) { \
+#define CAMERA_CAPTURE_ERROR_HANDLE(x) { \
   if (res_ < 0) { \
     uvc_perror(res_, x); \
     return false; \
@@ -22,37 +22,32 @@
 namespace uvc {
 
 Camera::~Camera() {
-  {
-    std::lock_guard<std::mutex> lock(
-        camera_connect_status_check_thread_running_lock_);
-    camera_connect_status_check_thread_running_ = false;
-    if (opened_ == false) {
-      camera_connect_status_check_cv_.notify_all();
-    }
-  }
-
   Close();
-
-  if (camera_connect_status_check_thread_ != nullptr) {
-    camera_connect_status_check_thread_->join();
-  }
 
   FreeResources();
 }
 
 bool Camera::Init(int width, int height, int fps) {
+  frame_width_ = width;
+  frame_height_ = height;
+  fps_ = fps;
+
   res_ = uvc_init(&ctx_, nullptr);
-  ERROR_HANDLE("uvc_init");
+  CAMERA_CAPTURE_ERROR_HANDLE("uvc_init");
 
   std::cout << "UVC initialized" << std::endl;
 
+  return true;
+}
+
+bool Camera::Open() {
   res_ = uvc_find_device(ctx_, &dev_, vid_, pid_, nullptr);
-  ERROR_HANDLE("uvc_find_device");
+  CAMERA_CAPTURE_ERROR_HANDLE("uvc_find_device");
 
   std::cout << "Device found" << std::endl;
 
   res_ = uvc_open(dev_, &devh_);
-  ERROR_HANDLE("uvc_open");
+  CAMERA_CAPTURE_ERROR_HANDLE("uvc_open");
 
   std::cout << "Device opened" << std::endl;
 
@@ -78,47 +73,37 @@ bool Camera::Init(int width, int height, int fps) {
       devh_,
       &ctrl_,
       frame_format,
-      width,
-      height,
-      fps);
+      frame_width_,
+      frame_height_,
+      fps_);
   uvc_print_stream_ctrl(&ctrl_, nullptr);
-  ERROR_HANDLE("get_mode");
+  CAMERA_CAPTURE_ERROR_HANDLE("get_mode");
 
-  connected_ = true;
-  camera_connect_status_check_thread_running_ = true;
-  if (camera_connect_status_check_thread_ == nullptr) {
-    camera_connect_status_check_thread_ = std::make_shared<std::thread>(
-        &Camera::CameraConnectStatusCheck, this);
-  }
-  return true;
-}
-
-bool Camera::Open() {
   res_ = uvc_start_streaming(devh_, &ctrl_, &Camera::FrameCallback,
                              (void *)this, 0);
-  ERROR_HANDLE("start_streaming");
+  CAMERA_CAPTURE_ERROR_HANDLE("start_streaming");
 
   std::cout << "Streaming" << std::endl;
 
   std::cout << "Enabling auto exposure" << std::endl;
   EnableAutoExposure();
 
-  {
-    std::lock_guard<std::mutex> opened_lock(opened_lock_);
-    opened_ = true;
-  }
-  camera_connect_status_check_cv_.notify_all();
   return true;
 }
 
 void Camera::Close() {
-  if (opened_) {
+  if (Opened()) {
     uvc_stop_streaming(devh_);
     std::cout << "Stream Closed" << std::endl;
-    {
-      std::lock_guard<std::mutex> opened_lock(opened_lock_);
-      opened_ = false;
+    if (devh_ != nullptr) {
+      uvc_close(devh_);
+      devh_ = nullptr;
     }
+  }
+
+  if (dev_ != nullptr) {
+    uvc_unref_device(dev_);
+    dev_ = nullptr;
   }
 }
 
@@ -130,23 +115,6 @@ bool Camera::Read(cv::Mat &frame) {
   frame = frame_queue_.front();
   frame_queue_.pop();
   return true;
-}
-
-bool Camera::ReOpenWhenDisconnected(int width, int height, int fps) {
-  Close();
-
-  FreeResources();
-
-  if (Init(width, height, fps) == false) {
-    Close();
-    return false;
-  };
-  return Open();
-}
-
-bool Camera::IsConnected() {
-  std::lock_guard<std::mutex> connected_lock(connected_lock_);
-  return connected_;
 }
 
 void Camera::EnableAutoExposure() {
@@ -178,71 +146,17 @@ void Camera::EnableAutoExposure() {
 // **暂时只处理jpeg格式**。
 void Camera::FrameCallback(uvc_frame_t *frame, void *ptr) {
   auto self = reinterpret_cast<Camera*>(ptr);
-
   cv::Mat f = cv::imdecode(cv::Mat(1, frame->data_bytes, CV_8UC1, frame->data),
                            cv::IMREAD_COLOR);
 
   std::lock_guard<std::mutex> lock(self->frame_lock_);
-  self->frame_flag_ = true;
   if (self->frame_queue_.size() >= 4) {
     self->frame_queue_.pop();
   }
   self->frame_queue_.push(f);
 }
 
-void Camera::CameraConnectStatusCheck() {
-  int no_frame_times = 0;
-  while (true) {
-    {
-      std::lock_guard<std::mutex> running_lock(
-          camera_connect_status_check_thread_running_lock_);
-      if (camera_connect_status_check_thread_running_ == false) {
-        return;
-      }
-    }
-
-    std::unique_lock<std::mutex> opened_lock(opened_lock_);
-    while (opened_ == false) {
-      if (camera_connect_status_check_thread_running_ == false) {
-        opened_lock.unlock();
-        return;
-      }
-      camera_connect_status_check_cv_.wait(opened_lock);
-    }
-    opened_lock.unlock();
-
-    {
-      std::lock_guard<std::mutex> frame_lock(frame_lock_);
-      if (frame_flag_) {
-        frame_flag_ = false;
-        no_frame_times = 0;
-
-        std::lock_guard<std::mutex> connected_lock(connected_lock_);
-        connected_ = true;
-      } else {
-        no_frame_times++;
-        if (no_frame_times >= kThreadWaitSeconds - 1) {
-          no_frame_times = 0;
-
-          std::lock_guard<std::mutex> connected_lock(connected_lock_);
-          connected_ = false;
-        }
-      }
-    }
-
-    sleep(1);
-  }
-}
-
 void Camera::FreeResources() {
-  if (devh_ != nullptr) {
-    uvc_close(devh_);
-    devh_ = nullptr;
-  }
-  if (dev_ != nullptr) {
-    uvc_unref_device(dev_);
-    dev_ = nullptr;
-  }
   if (ctx_ != nullptr) {
     uvc_exit(ctx_);
     ctx_ = nullptr;

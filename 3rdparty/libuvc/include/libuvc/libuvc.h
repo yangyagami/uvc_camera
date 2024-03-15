@@ -568,6 +568,8 @@ uvc_error_t uvc_open(
     uvc_device_handle_t **devh);
 void uvc_close(uvc_device_handle_t *devh);
 
+int uvc_is_opened_with_vid_pid(uvc_context_t *ctx, int vid, int pid);
+
 uvc_device_t *uvc_get_device(uvc_device_handle_t *devh);
 struct libusb_device_handle *uvc_get_libusb_handle(uvc_device_handle_t *devh);
 
