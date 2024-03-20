@@ -13,7 +13,7 @@ int main() {
   if (camera.Open() == false) {
     return 1;
   }
-  uint64_t count = 0;
+  int count = 0;
   while (true) {
     cv::Mat frame;
     bool ret = camera.Read(frame);
@@ -21,13 +21,12 @@ int main() {
       cv::imshow("window", frame);
       cv::waitKey(1);
     }
-    count++;
-    if (count >= 600000000) {
-      break;
-    }
     if (camera.Opened() == false) {
-      sleep(4);
       camera.Open();
+    }
+    count++;
+    if (count >= 60000000) {
+      break; 
     }
   }
   return 0;

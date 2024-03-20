@@ -41,6 +41,12 @@ bool Camera::Init(int width, int height, int fps) {
 }
 
 bool Camera::Open() {
+  // 说明相机硬件中途断开,再次打开需要释放资源。
+  if (dev_ != nullptr) {
+    uvc_unref_device(dev_);
+    dev_ = nullptr;
+  }
+
   res_ = uvc_find_device(ctx_, &dev_, vid_, pid_, nullptr);
   CAMERA_CAPTURE_ERROR_HANDLE("uvc_find_device");
 
@@ -92,7 +98,7 @@ bool Camera::Open() {
 }
 
 void Camera::Close() {
-  if (Opened()) {
+  if (Opened() && devh_ != nullptr) {
     uvc_stop_streaming(devh_);
     std::cout << "Stream Closed" << std::endl;
     if (devh_ != nullptr) {

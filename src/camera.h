@@ -31,7 +31,7 @@ class Camera {
   bool Read(cv::Mat &frame);
 
   bool Opened() {
-    return uvc_is_opened_with_vid_pid(ctx_, vid_, pid_);
+    return uvc_device_opened(ctx_, devh_);
   }
  private:
   static void FrameCallback(uvc_frame_t *frame, void *ptr);
